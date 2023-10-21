@@ -1,3 +1,4 @@
+@set masver=2.4
 @setlocal DisableDelayedExpansion
 @echo off
 
@@ -87,7 +88,7 @@ popd
 
 cls
 color 07
-title  Troubleshoot
+title  Troubleshoot %masver%
 
 set _args=
 set _elev=
@@ -147,7 +148,7 @@ set "_batp=%_batf:'=''%"
 
 set _PSarg="""%~f0""" -el %_args%
 
-set "_ttemp=%temp%"
+set "_ttemp=%userprofile%\AppData\Local\Temp"
 
 setlocal EnableDelayedExpansion
 
@@ -171,7 +172,7 @@ goto at_done
 %nul1% fltmc || (
 if not defined _elev %psc% "start cmd.exe -arg '/c \"!_PSarg:'=''!\"' -verb runas" && exit /b
 %nceline%
-echo This script require admin privileges.
+echo This script requires admin privileges.
 echo To do so, right click on this script and select 'Run as administrator'.
 goto at_done
 )
@@ -189,6 +190,33 @@ start cmd.exe /c ""!_batf!" %_args% -qedit"
 rem quickedit reset code is added at the starting of the script instead of here because it takes time to reflect in some cases
 exit /b
 )
+
+::========================================================================================================================================
+
+::  Check for updates
+
+set -=
+set old=
+
+for /f "delims=[] tokens=2" %%# in ('ping -4 -n 1 updatecheck.mass%-%grave.dev') do (
+if not [%%#]==[] (echo "%%#" | find "127.69" %nul1% && (echo "%%#" | find "127.69.%masver%" %nul1% || set old=1))
+)
+
+if defined old (
+echo ________________________________________________
+%eline%
+echo You are running outdated version MAS %masver%
+echo ________________________________________________
+echo:
+echo [1] Download Latest MAS
+echo [0] Continue Anyway
+echo:
+call :_color %_Green% "Enter a menu option in the Keyboard [1,0] :"
+choice /C:10 /N
+if !errorlevel!==2 rem
+if !errorlevel!==1 (start ht%-%tps://github.com/mass%-%gravel/Microsoft-Acti%-%vation-Scripts & start %mas% & exit /b)
+)
+cls
 
 ::========================================================================================================================================
 
@@ -214,7 +242,7 @@ setlocal EnableDelayedExpansion
 
 cls
 color 07
-title  Troubleshoot
+title  Troubleshoot %masver%
 mode con cols=77 lines=30
 
 echo:
@@ -375,7 +403,7 @@ goto :at_back
 :retokens
 
 cls
-mode con cols=115 lines=32
+mode con cols=125 lines=32
 %psc% "&{$W=$Host.UI.RawUI.WindowSize;$B=$Host.UI.RawUI.BufferSize;$W.Height=31;$B.Height=200;$Host.UI.RawUI.WindowSize=$W;$Host.UI.RawUI.BufferSize=$B;}"
 title  Fix Licensing ^(ClipSVC ^+ Office vNext ^+ SPP ^+ OSPP^)
 
@@ -388,6 +416,8 @@ echo       - It helps in troubleshooting activation issues.
 echo:
 echo       - This option will,
 echo            - Deactivate Windows and Office, you may need to reactivate
+echo              If Windows is activated with motherboard / OEM / Digital license then don't worry
+echo:
 echo            - Clear ClipSVC, Office vNext, SPP and OSPP licenses
 echo            - Fix SPP permissions of tokens folder and registries
 echo            - Trigger the repair option for Office.
@@ -508,7 +538,8 @@ for %%# in (wlidsvc LicenseManager) do (net stop %%# /y %nul% & net start %%# /y
 
 ::========================================================================================================================================
 
-::  Clear Office vNext License
+::  Find remnants of Office vNext license block and remove it because it stops non vNext licenses from appearing
+::  https://learn.microsoft.com/en-us/office/troubleshoot/activation/reset-office-365-proplus-activation-state
 
 :cleanvnext
 
@@ -547,21 +578,28 @@ echo Deleted Folder - !_Local!\Microsoft\Office\Licenses\
 echo Not Found - !_Local!\Microsoft\Office\Licenses\
 )
 
+
 echo:
-for %%# in (
-HKCU\Software\Microsoft\Office\16.0\Common\Licensing
-HKCU\Software\Microsoft\Office\16.0\Registration
+for /f "tokens=* delims=" %%a in ('%psc% "$userSIDs = Get-WmiObject -Class Win32_UserAccount | ForEach-Object {write-host $_.SID}" %nul6%') do (if defined _sid (set "_sid=!_sid! HKU\%%a") else (set "_sid=HKU\%%a"))
+
+set regfound=
+for %%# in (HKCU !_sid!) do (
+for %%A in (
+%%#\Software\Microsoft\Office\16.0\Common\Licensing
+%%#\Software\Microsoft\Office\16.0\Common\Identity
+%%#\Software\Microsoft\Office\16.0\Registration
 ) do (
-reg query %%# %nul% && (
-reg delete %%# /f %nul% && (
-echo Deleted Registry - %%#
+reg query %%A %nul% && (
+set regfound=1
+reg delete %%A /f %nul% && (
+echo Deleted Registry - %%A
 ) || (
-echo Failed to Delete - %%#
-)
-) || (
-echo Not Found Registry - %%#
+echo Failed to Delete - %%A
 )
 )
+)
+)
+if not defined regfound echo Not Found - Office vNext Registry Keys
 
 ::========================================================================================================================================
 
